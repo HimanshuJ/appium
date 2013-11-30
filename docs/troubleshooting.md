@@ -24,6 +24,8 @@ to github or write to the appium-discuss mailing list.
     ./reset.sh --android     # android-only
     ./reset.sh --selendroid  # selendroid-only
 * You might also want to run `reset.sh` with the `--dev` flag if you want the test apps downloaded and built as well.
+* You can also use `appium-doctor` to automatically verify that all dependencies are met. If running from source, you
+may have to use `bin/appium-doctor.js` or `node bin/appium-doctor.js`.
 * If you get this error after upgrading to Android SDK 22: 
     `{ANDROID_HOME}/tools/ant/uibuild.xml:155: SDK does not have any Build Tools installed.`
 In the Android SDK 22, the platform and build tools are split up into their own items in the SDK manager.  Make sure you install the build-tools and platform-tools.
@@ -42,6 +44,14 @@ In the Android SDK 22, the platform and build tools are split up into their own 
 * Make sure the app is compiled for the version of the simulator that's being run
 * If you've ever run Appium with sudo, you might need to `sudo rm /tmp/instruments_sock` and try again as not-sudo.
 * If this is the first time you've run Appium, make sure to authorize the use of Instruments. Usually a box will pop up that you enter your password into. If you're running Appium from source, you can simply run `sudo grunt authorize` from the main repo to avoid getting this popup. If you're running from npm, run `sudo authorize_ios` instead.
+* If you see `iOS Simulator failed to install the application.` and the paths are correct, try restarting the computer.
+
+
+## Webview/Hybrid/Safari app support
+
+* Make Sure you enable the 'Web Inspector' on the real device.
+* Make Sure you enable the Safari - Advance Preferences- Developer menu for simulators.
+
 
 ## FirefoxOS
 
@@ -64,7 +74,7 @@ If you're having trouble getting Appium working and the error messages Appium pr
 
 * If you've installed Node from the Node website, it requires that you use sudo
   for `npm`. This is not ideal. Try to get node with `brew install node` instead!
-* Webview support doesn't work on real iOS devices ([discussion](https://groups.google.com/d/msg/appium-discuss/u1ropm4OEbY/uJ3y422a5_kJ))
+* Webview support works on real iOS devices with a proxy, see [discussion](https://groups.google.com/d/msg/appium-discuss/u1ropm4OEbY/uJ3y422a5_kJ).
 * Sometimes iOS UI elements become invalidated milliseconds after they are
   found. This results in an error that looks like `(null) cannot be tapped`.
   Sometimes the only solution is to put the finding-and-acting code in a retry

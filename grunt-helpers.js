@@ -1,9 +1,8 @@
 "use strict";
 
 var _ = require("underscore")
-  , server = require('./server.js')
+  , server = require('./lib/server/main.js')
   , rimraf = require('rimraf')
-  , http = require('http')
   , path = require('path')
   , temp = require('temp')
   , mkdirp = require('mkdirp')
@@ -12,20 +11,21 @@ var _ = require("underscore")
   , prompt = require('prompt')
   , exec = require('child_process').exec
   , spawn = require('win-spawn')
-  , parser = require('./app/parser')
+  , parser = require('./lib/server/parser.js')
   , namp = require('namp')
   , parseXmlString = require('xml2js').parseString
   , appiumVer = require('./package.json').version
   , fs = require('fs')
-  , helpers = require('./app/helpers')
-  , isWindows = helpers.isWindows();
+  , helpers = require('./lib/helpers')
+  , isWindows = helpers.isWindows()
+  , getXcodeVersion = helpers.getXcodeVersion
+  , MAX_BUFFER_SIZE = 524288;
 
 module.exports.startAppium = function(appName, verbose, readyCb, doneCb) {
   var app;
   if (appName) {
     app = (fs.existsSync(appName)) ? appName:
-      path.resolve(__dirname,
-        "./sample-code/apps/"+appName+"/build/Release-iphonesimulator/"+appName+".app");
+      path.resolve(__dirname, "sample-code", "apps", appName, "build", "Release-iphonesimulator", appName + ".app");
   } else {
     app = null;
   }
@@ -144,7 +144,7 @@ module.exports.setDeviceConfigVer = function(grunt, device, cb) {
 };
 
 module.exports.writeConfigKey = function(grunt, key, value, cb) {
-  var configPath = path.resolve(__dirname, '.appiumconfig');
+  var configPath = path.resolve(__dirname, ".appiumconfig");
   fs.readFile(configPath, function(err, data) {
     var writeConfig = function(config) {
       config[key] = value;
@@ -167,103 +167,184 @@ module.exports.setGitRev = function(grunt, rev, cb) {
   exports.writeConfigKey(grunt, "git-sha", rev, cb);
 };
 
-module.exports.authorize = function(grunt, cb) {
-  // somewhat messily ported from penguinho's authorize.py
-  var authFile = '/etc/authorization';
-  exec('DevToolsSecurity --enable', function(err, stdout, stderr) {
-    if (err) throw err;
-    fs.readFile(authFile, 'utf8', function(err, data) {
-      if (err) throw err;
-      var origData = data;
-      var re = /<key>system.privilege.taskport<\/key>\s*\n\s*<dict>\n\s*<key>allow-root<\/key>\n\s*(<[^>]+>)/;
-      var match = re.exec(data);
-      if (!match) {
-        grunt.fatal("Could not find the system.privilege.taskport key in /etc/authorization");
-      } else {
-        if (!(/<false\/>/.exec(match[0]))) {
-          grunt.fatal("/etc/authorization has already been modified to support appium");
-        } else {
-          var newText = match[0].replace(match[1], '<true/>');
-          var newContent = data.replace(match[0], newText);
-          temp.open('authorization.backup.', function (err, info) {
-            fs.write(info.fd, origData);
-            fs.close(info.fd, function(err) {
-              if (err) throw err;
-              grunt.log.writeln("Backed up to " + info.path);
-              var diff = difflib.contextDiff(origData.split("\n"), newContent.split("\n"), {fromfile: "before", tofile: "after"});
-              grunt.log.writeln("Check this diff to make sure the change looks cool:");
-              grunt.log.writeln(diff.join("\n"));
-              prompt.start();
-              var promptProps = {
-                properties: {
-                  proceed: {
-                    pattern: /^(y|n)/
-                    , description: "Make changes? [y/n] "
-                  }
-                }
-              };
-              prompt.get(promptProps, function(err, result) {
-                if (result.proceed == "y") {
-                  fs.writeFile(authFile, newContent, function(err) {
-                    if (err) {
-                      if (err.code === "EACCES") {
-                        grunt.fatal("You need to run this as sudo!");
-                      } else {
-                        throw err;
-                      }
-                    }
-                    grunt.log.writeln("Wrote new /etc/authorization");
-                    cb();
-                  });
-                } else {
-                  grunt.log.writeln("No changes were made");
-                  cb();
-                }
-              });
-            });
-          });
-        }
-      }
+var auth_enableDevTools = function(grunt, cb) {
+  grunt.log.writeln("Enabling DevToolsSecurity");
+  exec('DevToolsSecurity --enable', function(err) {
+    if (err) grunt.fatal(err);
+    cb();
+  });
+};
+
+var auth_getTaskportSection = function(grunt, authFileData) {
+  grunt.log.writeln("Getting system.privilege.taskport section");
+  var re = /<key>system.privilege.taskport<\/key>\s*\n\s*<dict>\n\s*<key>allow-root<\/key>\n\s*(<[^>]+>)/;
+  var match = re.exec(authFileData);
+  if (!match) {
+    grunt.fatal("Could not find the system.privilege.taskport key");
+  } else {
+    return match;
+  }
+};
+
+var auth_writeAuthBackup = function(grunt, origData, cb) {
+  grunt.log.writeln("Writing backup of authFile");
+  temp.open('authorization.backup.', function (err, info) {
+    if (err) grunt.fatal(err);
+    fs.close(info.fd, function(err) {
+      if (err) grunt.fatal(err);
+      fs.writeFile(info.path, origData, function(err) {
+        if (err) grunt.fatal(err);
+        grunt.log.writeln("Backed up to " + info.path);
+        cb();
+      });
     });
   });
 };
 
-module.exports.build = function(appRoot, cb, sdk) {
-  if (typeof sdk == "undefined") {
-    sdk = 'iphonesimulator6.0';
-  }
-  var cmd = 'xcodebuild -sdk ' + sdk + ' clean';
-  console.log("Cleaning build...");
-  var xcode = exec(cmd, {cwd: appRoot, maxBuffer: 524288}, function(err, stdout, stderr) {
-    if (err) {
-      console.log("Failed cleaning app, maybe it doesn't exist?");
-      return cb(stdout + "\n" + stderr);
-    }
-    console.log("Building app...");
-    var args = ['-sdk', sdk, '-arch', 'i386'];
-    xcode = spawn('xcodebuild', args, {
-      cwd: appRoot
-    });
-    var output = '';
-    var collect = function(data) { output += data; };
-    xcode.stdout.on('data', collect);
-    xcode.stderr.on('data', collect);
-    xcode.on('exit', function(code) {
-      if (code === 0) {
-        cb(null);
-      } else {
-        console.log("Failed building app, maybe it doesn't exist?");
-        cb(output);
+var auth_confirmAuthDiff = function(grunt, diff, cb) {
+  grunt.log.writeln("Check this diff to make sure the change looks cool:");
+  grunt.log.writeln(diff.join("\n"));
+  prompt.start();
+  var promptProps = {
+    properties: {
+      proceed: {
+        pattern: /^(y|n)/
+        , description: "Make changes? [y/n] "
       }
+    }
+  };
+  prompt.get(promptProps, function(err, result) {
+    if (err) grunt.fatal(err);
+    if (result.proceed == "y") {
+      cb(null, true);
+    } else {
+      cb(null, false);
+    }
+  });
+};
+
+var auth_writeAuthFile = function(grunt, cb) {
+  grunt.log.writeln("Getting authorization file");
+  var authFile = '/System/Library/Security/authorization.plist';
+  if (!fs.existsSync(authFile)) {
+    // on Mountain Lion auth is in a different place
+    authFile = '/etc/authorization';
+  }
+  if (!fs.existsSync(authFile)) {
+    grunt.fatal("could not find authorization file");
+  }
+  fs.readFile(authFile, {encoding: 'utf8'}, function(err, data) {
+    if (err) grunt.fatal(err);
+    var taskportSection;
+    try {
+      taskportSection = auth_getTaskportSection(grunt, data);
+    } catch (e) {
+      grunt.fatal(e);
+    }
+    if (!(/<false\/>/.exec(taskportSection[0]))) {
+      grunt.log.writeln(authFile + " has already been modified to support appium");
+      return cb();
+    } else {
+      auth_writeAuthBackup(grunt, data, function(err) {
+        if (err) grunt.fatal(err);
+        var newText = taskportSection[0].replace(taskportSection[1], '<true/>');
+        var newContent = data.replace(taskportSection[0], newText);
+        var diff = difflib.contextDiff(data.split("\n"),
+                                       newContent.split("\n"),
+                                       {fromfile: "before", tofile: "after"});
+        auth_confirmAuthDiff(grunt, diff, function(err, confirmed) {
+          if (err) grunt.fatal(err);
+          if (confirmed) {
+            fs.writeFile(authFile, newContent, function(err) {
+              if (err) {
+                if (err.code === "EACCES") {
+                  return grunt.fatal("You need to run this as sudo!");
+                } else {
+                  return grunt.fatal(err);
+                }
+              }
+              grunt.log.writeln("Wrote new " + authFile);
+              cb();
+            });
+          } else {
+            grunt.log.writeln("No changes were made");
+            cb();
+          }
+        });
+      });
+    }
+  });
+};
+
+var auth_updateSecurityDb = function(grunt, cb) {
+  grunt.log.writeln("Updating security db");
+  var cmd = "security authorizationdb write system.privilege.taskport " +
+            "is-developer";
+  exec(cmd, function(err) {
+    if (err) grunt.fatal(err);
+    cb();
+  });
+};
+
+module.exports.authorize = function(grunt, cb) {
+  auth_enableDevTools(grunt, function(err) {
+    if (err) grunt.fatal(err);
+    auth_writeAuthFile(grunt, function(err) {
+      if (err) grunt.fatal(err);
+      auth_updateSecurityDb(grunt, function(err) {
+        if (err) grunt.fatal(err);
+        cb();
+      });
     });
   });
+};
+
+module.exports.build = function(appRoot, cb, sdk, xcconfig) {
+  var next = function() {
+    var cmd = 'xcodebuild -sdk ' + sdk + ' clean';
+    console.log('Using sdk: ' + sdk + '...');
+    console.log("Cleaning build...");
+    var xcode = exec(cmd, {cwd: appRoot, maxBuffer: MAX_BUFFER_SIZE}, function(err, stdout, stderr) {
+      if (err) {
+        console.log("Failed cleaning app, maybe it doesn't exist?");
+        return cb(stdout + "\n" + stderr);
+      }
+      console.log("Building app...");
+      var args = ['-sdk', sdk];
+      if (typeof xcconfig !== "undefined") {
+        args = args.concat(['-xcconfig', xcconfig]);
+      }
+      xcode = spawn('xcodebuild', args, {
+        cwd: appRoot
+      });
+      var output = '';
+      var collect = function(data) { output += data; };
+      xcode.stdout.on('data', collect);
+      xcode.stderr.on('data', collect);
+      xcode.on('exit', function(code) {
+        if (code === 0) {
+          cb(null);
+        } else {
+          console.log("Failed building app, maybe it doesn't exist?");
+          cb(output);
+        }
+      });
+    });
+  };
+  if (typeof sdk === "undefined") {
+    getXcodeVersion(function(err, version) {
+      if (err) return cb(err);
+      var sdkVersion = version[0] === "5" ? "7.0" : "6.1";
+      sdk = 'iphonesimulator' + sdkVersion;
+      next();
+    });
+  } else {
+    next();
+  }
 };
 
 module.exports.buildApp = function(appDir, cb, sdk) {
-  if(typeof sdk === "undefined") {
-    sdk = "iphonesimulator6.1";
-  }
-  var appRoot = path.resolve(__dirname, 'sample-code/apps/', appDir);
+  var appRoot = path.resolve(__dirname, "sample-code", "apps", appDir);
   module.exports.build(appRoot, function(err) {
     if (err !== null) {
       console.log(err);
@@ -275,9 +356,9 @@ module.exports.buildApp = function(appDir, cb, sdk) {
 };
 
 module.exports.signApp = function(appName, certName, cb) {
-  var appPath = path.resolve(__dirname, 'sample-code/apps/', appName,
-      'build/Release-iphonesimulator');
-  exec("codesign -f -s \"" + certName + "\" -v " + appName + ".app", {cwd: appPath, maxBuffer: 524288}, function(err, stdout, stderr) {
+  var appPath = path.resolve(__dirname, "sample-code", "apps", appName,
+      "build", "Release-iphonesimulator");
+  exec("codesign -f -s \"" + certName + "\" -v " + appName + ".app", {cwd: appPath, maxBuffer: MAX_BUFFER_SIZE}, function(err, stdout, stderr) {
     console.log(stdout);
     console.log(stderr);
     if (err) {
@@ -288,36 +369,31 @@ module.exports.signApp = function(appName, certName, cb) {
   });
 };
 
-module.exports.downloadUICatalog = function(cb) {
-  var appBasePath = path.resolve(__dirname, 'sample-code/apps');
-  var appPath = path.resolve(appBasePath, 'UICatalog');
-  var zipPath = path.resolve(appBasePath, 'UICatalog.zip');
-  var UICatUrl = "http://developer.apple.com/library/ios/samplecode/UICatalog/UICatalog.zip";
-  // clear out anything that's there
-  try {
-    fs.unlinkSync(zipPath);
-  } catch(e) {}
-  rimraf(appPath, function() {
-    var file = fs.createWriteStream(zipPath);
-    console.log("Downloading UI catalog into " + zipPath);
-    http.get(UICatUrl, function(response) {
-      response.pipe(file);
-      response.on('end', function() {
-        console.log("Download complete");
-        exec("unzip UICatalog.zip", {cwd: appBasePath, maxBuffer: 524288}, function() {
-          console.log("Unzipped into " + appPath);
-          cb();
-        });
-      });
-    });
-  });
+module.exports.buildSafariLauncherApp = function(cb, sdk, xcconfig) {
+  var appRoot = path.resolve(__dirname, "submodules", "SafariLauncher");
+  module.exports.build(appRoot, function(err) {
+    if (err !== null) {
+      console.log(err);
+      cb(false);
+    } else {
+      cb(true);
+    }
+  }, sdk, xcconfig);
 };
+
 
 var setupAndroidProj = function(grunt, projPath, args, cb) {
   if (!process.env.ANDROID_HOME) {
     grunt.fatal("Could not find Android SDK, make sure to export ANDROID_HOME");
   }
-  var cmd = path.resolve(process.env.ANDROID_HOME, "tools", "android");
+  var tool = "android";
+  if (isWindows) {
+    tool = "android.bat";
+  }
+  var cmd = path.resolve(process.env.ANDROID_HOME, "tools", tool);
+  if (!fs.existsSync(cmd)) {
+    grunt.fatal("The `android` command was not found at \"" + cmd + "\", are you sure ANDROID_HOME is set properly?");
+  }
   var proc = spawn(cmd, args, {cwd: projPath});
   proc.stdout.setEncoding('utf8');
   proc.stderr.setEncoding('utf8');
@@ -333,29 +409,31 @@ var setupAndroidProj = function(grunt, projPath, args, cb) {
 };
 
 module.exports.setupAndroidBootstrap = function(grunt, cb) {
-  var projPath = path.resolve(__dirname, "android", "bootstrap");
+  var projPath = path.resolve(__dirname, "lib", "devices", "android",
+      "bootstrap");
   var args = ["create", "uitest-project", "-n", "AppiumBootstrap", "-t",
-              "android-17", "-p", "."];
+              "android-18", "-p", "."];
+  // TODO: possibly check output of `android list target` to make sure api level 18 is available?
   setupAndroidProj(grunt, projPath, args, cb);
 };
 
 module.exports.setupAndroidApp = function(grunt, appName, cb) {
-  var appPath = path.resolve(__dirname, "sample-code/apps/" + appName);
-  var args = ["update", "project", "--subprojects", "-t", "android-17", "-p", "."];
+  var appPath = path.resolve(__dirname, "sample-code", "apps", appName);
+  var args = ["update", "project", "--subprojects", "-t", "android-18", "-p", "."];
   setupAndroidProj(grunt, appPath, args, cb);
 };
 
 var buildAndroidProj = function(grunt, projPath, target, cb) {
   var cmdName = 'ant';
-  if (!fs.existsSync(path.resolve(projPath, 'build.xml')) &&
-      fs.existsSync(path.resolve(projPath, 'pom.xml'))) {
+  if (!fs.existsSync(path.resolve(projPath, "build.xml")) &&
+      fs.existsSync(path.resolve(projPath, "pom.xml"))) {
       cmdName = 'mvn';
   }
   var whichCmd = 'which ';
     if (isWindows) {
         whichCmd = 'where ';
     }
-    exec(whichCmd + cmdName, { maxBuffer: 524288 }, function(err, stdout) {
+    exec(whichCmd + cmdName, { maxBuffer: MAX_BUFFER_SIZE }, function(err, stdout) {
     if (err) {
       grunt.fatal("Error finding " + cmdName + " binary, is it on your path?");
     } else {
@@ -382,7 +460,8 @@ var buildAndroidProj = function(grunt, projPath, target, cb) {
 };
 
 module.exports.buildAndroidBootstrap = function(grunt, cb) {
-  var projPath = path.resolve(__dirname, "android", "bootstrap");
+  var projPath = path.resolve(__dirname, "lib", "devices", "android",
+      "bootstrap");
   var binSrc = path.resolve(projPath, "bin", "AppiumBootstrap.jar");
   var binDestDir = path.resolve(__dirname, "build", "android_bootstrap");
   var binDest = path.resolve(binDestDir, "AppiumBootstrap.jar");
@@ -426,7 +505,7 @@ module.exports.buildSelendroidServer = function(cb) {
       "selendroid-server", "AndroidManifest.xml");
     var dstManifest = path.resolve(destDir, "AndroidManifest.xml");
     var cmd = "mvn clean install";
-    exec(cmd, {cwd: buildDir, maxBuffer: 524288}, function(err, stdout, stderr) {
+    exec(cmd, {cwd: buildDir, maxBuffer: MAX_BUFFER_SIZE}, function(err, stdout, stderr) {
       if (err) {
         console.error("Unable to build selendroid server. Stdout was: ");
         console.error(stdout);
@@ -514,12 +593,12 @@ var getSelendroidVersion = function(cb) {
 };
 
 module.exports.buildAndroidApp = function(grunt, appName, cb) {
-  var appPath = path.resolve(__dirname, "sample-code/apps/" + appName);
+  var appPath = path.resolve(__dirname, "sample-code", "apps", appName);
   buildAndroidProj(grunt, appPath, "debug", cb);
 };
 
 module.exports.buildSelendroidAndroidApp = function(grunt, appName, cb) {
-  var appPath = path.resolve(__dirname, "sample-code/apps/" + appName);
+  var appPath = path.resolve(__dirname, "sample-code", "apps" + appName);
   buildAndroidProj(grunt, appPath, "package", cb);
 };
 
@@ -532,12 +611,12 @@ module.exports.installAndroidApp = function(grunt, appName, cb) {
     grunt.fatal(new Error(msg));
   }
 
-  var appPath = path.resolve(__dirname, "sample-code/apps/" + appName,
+  var appPath = path.resolve(__dirname, "sample-code", "apps", appName,
       "bin/" + appName + "-debug.apk");
-  exec("adb uninstall " + pkgMap[appName], { maxBuffer: 524288 }, function(err, stdout) {
+  exec("adb uninstall " + pkgMap[appName], { maxBuffer: MAX_BUFFER_SIZE }, function(err, stdout) {
     if (err) return grunt.fatal(err);
     grunt.log.write(stdout);
-    exec("adb install -r " + appPath, { maxBuffer: 524288 }, function(err, stdout) {
+    exec("adb install -r " + appPath, { maxBuffer: MAX_BUFFER_SIZE }, function(err, stdout) {
       if (err) return grunt.fatal(err);
       grunt.log.write(stdout);
       cb();
@@ -549,7 +628,7 @@ module.exports.generateServerDocs = function(grunt, cb) {
   var p = parser();
   var docFile = path.resolve(__dirname, "docs/server-args.md");
   var md = "Appium server arguments\n==========\n\n";
-  md += "Usage: `node server.js [flags]`\n\n";
+  md += "Usage: `node . [flags]`\n\n";
   md += "### Server flags\n";
   md += "All flags are optional, but some are required in conjunction with " +
         "certain others.\n\n";
@@ -586,7 +665,7 @@ module.exports.generateAppiumIo = function(grunt, cb) {
       , sidebarHtml = generateSidebarHtml(headers)
       , warning = "<!-- THIS FILE IS AUTOMATICALLY GENERATED DO NOT EDIT -->\n"
       , bodyHtml = generateBodyHtml(readmeLex, headers)
-      , submod = path.resolve(__dirname, "submodules/appium.io")
+      , submod = path.resolve(__dirname, "submodules", "appium.io")
       , outfile = submod + "/getting-started.html";
 
     var newDoc = template.replace("{{ SIDENAV }}", sidebarHtml)
@@ -605,7 +684,7 @@ module.exports.generateAppiumIo = function(grunt, cb) {
                   'git merge master && ' +
                   'git push origin gh-pages && ' +
                   'git checkout master';
-        exec(cmd, {cwd: submod, maxBuffer: 524288}, function(err, stdout, stderr) {
+        exec(cmd, {cwd: submod, maxBuffer: MAX_BUFFER_SIZE}, function(err, stdout, stderr) {
           if (err) {
             console.log(stdout);
             console.log(stderr);
@@ -621,7 +700,7 @@ module.exports.generateAppiumIo = function(grunt, cb) {
 };
 
 var getAppiumIoFiles = function(cb) {
-  var templateFile = path.resolve(__dirname, "submodules/appium.io/getting-started-template.html")
+  var templateFile = path.resolve(__dirname, "submodules", "appium.io", "getting-started-template.html")
     , readmeFile = path.resolve(__dirname, "README.md");
 
   fs.readFile(templateFile, function(err, templateData) {

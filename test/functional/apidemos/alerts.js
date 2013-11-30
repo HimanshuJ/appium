@@ -1,4 +1,3 @@
-/*global it:true */
 "use strict";
 
 var path = require('path')
@@ -7,8 +6,10 @@ var path = require('path')
   , appAct = ".ApiDemos"
   , describeWd = require("../../helpers/driverblock.js").describeForApp(appPath,
       "android", appPkg, appAct)
+  , it = require("../../helpers/driverblock.js").it
   , should = require('should')
   , net = require('net')
+  , appiumPort = process.env.APPIUM_PORT || 4723
   , io = require('socket.io-client');
 
 
@@ -42,7 +43,7 @@ describeWd('alert dialog detection', function() {
       'force new connection': true
     };
     try {
-      var client = io.connect('http://127.0.0.1:4723', options);
+      var client = io.connect('http://127.0.0.1:' + appiumPort, options);
       client.on('connect', function() {
         runCommands(['power ac off', 'power capacity 9'], function(success) {
           success.should.equal(true);

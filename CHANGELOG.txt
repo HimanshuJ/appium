@@ -1,3 +1,379 @@
+CHANGES IN VERSION 0.12.0 (from 0.11.4)
+=======================================
+
+#### General
+- make sure there's no color in console when --log-no-colors is used
+- add more chinese docs
+- allow periods in xpath node names
+- update style guide
+- bring all NPM dependencies up to date
+
+#### iOS
+- mobile web: doc updates
+- mobile web: make sure window.close() works on real devices
+- mobile web: connect to most recent webview instead of first
+- allow uiauto to get path to node binary from `node_bin` key in .appiumconfig
+- fix automatic UDID detection
+- improve webviewapp to be a safari replacement; can now be used for mobile
+  web automation using `app: iwebview`
+- use `deviceName` cap to select specific iOS device
+- mobile web: automatically accept popup window alerts
+- give informative error message if ideviceinstaller isn't present
+- add a wait after flick calls so client doesn't regain control before flick
+  has finished
+
+#### Android
+- make sure chrome tests don't require package/activity
+- make sure we force-stop apps before starting them
+- fix issue with checking for package/activity for chrome
+- make sure to kill any running uiautomator processes before test
+- add `fastClear` desired cap, default true. If false, uses reinstall
+  instead of `pm clear` to reset an app
+- anytime we call `dumpsys windows` when checking for screen lock, dump output
+  to $APPIUM_HOME/.dumpsys.log so we can learn more about error cases
+
+
+CHANGES IN VERSION 0.11.4 (from 0.11.3)
+=======================================
+
+#### General
+- add ruby scrollTo example
+
+#### iOS
+- fix dismissAlert / acceptAlert on ios7
+- make instruments logging quiet by default (put verbose=true in
+  ~/.instruments.conf to re-enable)
+- fix safarilauncher shutdown issue
+- add tests for setting slider values
+- set ios sim language using desired caps
+- add more error handling in instruments_client
+
+#### Android
+- fix issue with adb path and quote truncation
+- fail with a nice message if app activity/package are not sent in
+
+#### Selendroid
+- fix keyevent
+- add command timeout tests
+
+
+CHANGES IN VERSION 0.11.3 (from 0.11.2)
+=======================================
+
+#### General
+- remove wiki
+- various doc updates
+- reset command timeout for proxied devices (incl selendroid)
+- translate docs to Chinese
+- make desired capabilities returned by /session/:id non-hard-coded
+
+#### iOS
+- add support for sim and devices for safari launcher
+- major refactor of ios startup cascade
+- fix tracetemplate detection logic
+- add ability to select code-signing identity for safari launcher
+- use securitydb for authorization on 10.9
+- expose 'syslog' logs through selenium log interface
+
+#### Android
+- various control flow/subprocess fixes
+- don't uninstall app when --no-reset is used
+
+#### Selendroid
+- update selendroid version
+
+
+
+CHANGES IN VERSION 0.11.2 (from 0.11.1)
+=======================================
+
+#### General
+- fix bug where running `appium` after installing via npm would error out
+  because the logger was not initialized correctly
+- fix bug in reset.sh where setting --real-safari would cause android et al
+  not to build
+
+
+CHANGES IN VERSION 0.11.1 (from 0.11.0)
+=======================================
+
+#### General
+- fix launch timeout bug
+- update travis CI to use newer version of node
+- remove .appiumconfig before running reset.sh
+- update reset.sh to build safarilauncher for real devices only when
+  passing in the --real-safari flag
+- made test.sh sh-compatible
+- update all example code to use correct desired capabilities
+- don't set content-length header for http POSTS with no body
+- add more desired caps to docs
+- expand on android setup for mac osx in docs
+- remove multiple device handling code--appium just does one device at a time
+  per server
+- handle command timeouts centrally rather than per-device
+- add --log-timestamp and --log-no-colors options to server
+
+#### iOS
+- fix sim control authorization on mavericks
+- copy instead of symlink xpath/status into uiauto for non-breaking npm install
+- fix cookie methods error case in mobile safari
+- fail with an error message if user is on xcode 5.0.1 since it comes with
+  a broken instruments binary
+
+#### Android
+- don't uninstall app on fast reset
+- fix crash that occurred when no devices were connected
+- fix unlock logic and change order of regex search
+- correctly handle responses for element{Displayed|Enabled|Selected}
+- refactor adb/android/uiautomator startup/shutdown logic to make
+  callback-based
+- kill uiautomator if the startup cascade for android fails, so it doesn't
+  zombify
+
+
+CHANGES IN VERSION 0.11.0 (from 0.10.4)
+=======================================
+
+#### General
+- make tempdirs uniquely named
+- massive code reorganization
+- retry getting a session in testsuite to avoid flaky fails
+
+#### iOS
+- update ios alert handling
+- use safariLauncher without 20/30 secs timeout
+- allow .ipa extension for local apps
+
+#### Android
+- clean app using `pm clear` instead of clean.apk
+- massive refactor/rewrite of android/adb code
+- fix dependency download error
+- ensure all apks are signed
+
+
+CHANGES IN VERSION 0.10.4 (from 0.10.3)
+=======================================
+
+#### iOS
+- add callback for remote debugger socket disconnect to avoid race conditions
+
+#### Android
+- allow _ in package name
+- add timeout for orientation change
+
+
+CHANGES IN VERSION 0.10.3 (from 0.10.2)
+=======================================
+
+#### General
+- this is a bugfix release
+
+#### iOS
+- compile the i-w-d shim correctly for ios7
+
+
+CHANGES IN VERSION 0.10.2 (from 0.10.1)
+=====================================
+
+#### General
+- update docs
+- README rewrite
+
+#### iOS
+- allow spaces in xcode path
+- completely reset and restart simulator between sessions
+- turn CA_DEBUG_TRANSACTIONS on
+- enable `authorize_ios` on Mavericks
+- fix bug making handling alerts take longer than necessary
+
+#### Android
+- update clean.apk
+- refactored setOrientation
+- fix screenshot method
+- implement pinch in / out
+- upgrade unlock.apk
+- use pm uninstall/install in reset
+
+#### Windows
+- lots of reset.bat improvements
+- make some more paths windows friendly
+
+
+CHANGES IN VERSION 0.10.1 (from 0.10.0)
+=====================================
+
+#### Android
+- add hybrid app docs
+- fix unlock.apk for android 2.3
+- get unlock.apk into build/ so prebuilt packages can use it
+
+#### Selendroid
+- make unlock.apk work with selendroid
+- change remote url for selendroid submodule
+- update selendroid to 0.6.0
+
+
+CHANGES IN VERSION 0.10.0 (from 0.9.1)
+=====================================
+
+#### General
+- update contributor style guide
+- add some troubleshooting tips to doc
+- update test.sh for a better testing flow
+
+#### iOS
+- autodetect tracetemplate rather than bundling with appium
+- choose version of instruments-without-delay based on xcode version
+- get rid of --ios-sdk flag in reset.sh since appium now autodetects
+
+#### Android
+- fix find elements by ID
+- update clean.apk
+- update touchevent for longpress
+- add unlock.apk which is a more robust device unlock solution
+- enable mobile chrome support on windows
+- better support for tapping invisible elements
+
+
+CHANGES IN VERSION 0.9.1 (from 0.9.0)
+=====================================
+
+#### General
+- add desired caps doc
+- moveTo defaults to 0.5, 0.5
+- add some more node/yiewd examples
+- beefed up test.sh
+
+#### iOS
+- fix issue with finding ids
+- add --ios-sdk flag to reset.sh to choose between 6.1/7.0
+- various ios 7 compatibility fixes
+- significant refactor of ios session lifecycle code, fixing various issues
+- add automatic UDID detection
+- attempt to tap element's coordinates when typical method doesn't work
+- support more types of zip archives
+
+#### Android
+- restart adb up to 10 times instead of 2
+- fix --avd launching bug
+- fix swipe steps/duration logic (note: will affect test behavior)
+- support metastate for keyevent
+
+#### Phonegap
+- fix submodule issues
+
+_Historical Note_: This version of Appium was published by @jlipps in a moving
+vehicle on a drive from Krakow, Poland to Warsaw, Poland. Thanks, @bkobos, for
+the chaffeurship and wi-fi!
+
+
+CHANGES IN VERSION 0.9.0 (from 0.8.5)
+=====================================
+
+#### General
+- update troubleshooting doc
+- fix app unzip issue
+- remove app/apk files from zip path before appium starts
+- fix location of UICatalog in reset.sh
+- fix reset.sh android device matching
+- update ruby examples
+- add chrome example in node
+- improve python example code
+- begin to migrate tests from wd to yiewd
+
+#### iOS
+- respond to the last command even if instruments crashes
+- don't attempt to reset real devices
+- update instruments-without-delay with ios7 support
+- add findById support (uses localization strings)
+- add mobile: getStrings
+- support setting value for sliders and switches with sendKeys()
+- add preliminary support for ios7 with a different tracetemplate
+- make mobile: localScreenshot more robust by fixing race condition
+- add phonegap example
+
+#### Android
+- don't require 'avd' to be set in order to install/uninstall to android
+- dynamic find can use classmap aliases
+- make it easy to run multiple android devices simultaneously
+- support for dragFrom / dragTo functions in API level 18
+- use resource-id for finding elements (findById)
+- make getSize available
+- make desired cap for compressedLayoutHierarchy
+- add new version of unsign.jar
+- fix stopCapture bug
+- remove some deprecated methods (xmlKeyContains, etc)
+- add mobile: getStrings
+- always return true for click() (uiautomator bug)
+- fix getAttribute to return strings instead of bool
+- fix tests for use with now-required 4.3 emulator
+- add phonegap example
+
+#### Selendroid
+- track selendroid dev branch instead of master
+- upgrade to selendroid 0.5.0
+
+#### Windows
+- update docs
+- some windows compat fixes
+
+
+CHANGES IN VERSION 0.8.5 (from 0.8.4)
+=====================================
+
+#### GENERAL
+- reorder problematic async calls (issue #1000!)
+- misc refactoring
+
+#### Android
+- allow install/uninstall without device id
+- fix race condition in starting chromedriver
+
+#### Selendroid
+- update selendroid version
+- fix issue preventing errors from proxying correctly
+
+
+CHANGES IN VERSION 0.8.4 (from 0.8.3)
+=====================================
+
+#### GENERAL
+- some documentation updates
+- give appium server a big http timeout so it doesn't drop connections
+
+#### Android
+- make sure chromedriver tries to restart adb if it fails the first time
+- add logcat retrieval for android and selendroid
+
+#### IOS
+- allow use of --ipa and --app flags together
+- try out a fix in mechanic.js for the (null) tap issues
+
+
+CHANGES IN VERSION 0.8.3 (from 0.8.2)
+=====================================
+
+#### GENERAL
+- update various documentation (gestures, inspector tutorial, README)
+- allow dashes in bundle/package IDs
+- fix bad address startup error message
+- use native function.bind() throughout instead of a mix of scoped objects
+  and underscore.bind()
+
+#### Android
+- use UiAutomator for back() instead of keyevent
+- use UiAutomator for keyCode instead of adb shell
+- use UiAutomator for screenshot instead of adb shell
+
+### IOS
+- add some more mechanic aliases (keyboard, key)
+- add pinch/zoom gestures
+- add Java example for automating mobile safari
+- automatically accept location services dialogs if we can access them
+- accept text-based Info.plist files in addition to binary ones
+- use reset.sh to download UICatalog rather than node/grunt
+
+
 CHANGES IN VERSION 0.8.2 (from 0.8.1)
 =====================================
 

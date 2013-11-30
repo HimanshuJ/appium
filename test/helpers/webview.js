@@ -1,8 +1,9 @@
-/*global it:true */
 "use strict";
 
 var driverBlock = require("./driverblock.js")
+  , it = driverBlock.it
   , describeSafari = driverBlock.describeForSafari()
+  , describeIWebView = driverBlock.describeForIWebView()
   , describeChrome = driverBlock.describeForChrome()
   , appiumPort = process.env.APPIUM_PORT || 4723
   , testEndpoint = 'http://localhost:' + appiumPort + '/test/'
@@ -39,7 +40,7 @@ module.exports.loadWebView = function(webviewType, driver, cb, urlToLoad, titleT
   if (typeof titleToSpin === "undefined") {
     titleToSpin = 'I am a page title';
   }
-  if (webviewType === "safari") {
+  if (webviewType === "safari" || webviewType === "iwebview") {
     driver.get(urlToLoad, function(err) {
       should.not.exist(err);
       module.exports.spinTitle(titleToSpin, driver, cb);
@@ -74,6 +75,8 @@ module.exports.buildTests = function(webviewType) {
   var desc;
   if (webviewType === "safari") {
     desc = describeSafari;
+  } else if (webviewType === "iwebview") {
+    desc = describeIWebView;
   } else if (webviewType === "chrome") {
     desc = describeChrome;
   } else {
@@ -427,8 +430,8 @@ module.exports.buildTests = function(webviewType) {
         h.driver.getWindowSize(function(err, size) {
           should.not.exist(err);
           // iphone and ipad, webview.app and mobile safari
-          [356, 928, 788, 752, 797].should.include(size.height);
-          [320, 768, 414].should.include(size.width);
+          size.height.should.be.above(350);
+          size.width.should.be.above(300);
           done();
         });
       });
@@ -565,7 +568,7 @@ module.exports.buildTests = function(webviewType) {
     it("should bubble up javascript errors", function(done) {
       loadWebView(h.driver, function() {
         h.driver.execute("'nan'--", function(err, val) {
-          err.message.should.equal("Error response status: 13.");
+          err.message.should.include("Error response status: 13.");
           should.not.exist(val);
           done();
         });
@@ -1176,5 +1179,19 @@ module.exports.buildTests = function(webviewType) {
       });
     });
   });
+
+  if (webviewType === "iwebview") {
+    desc('https', function(h) {
+      it('should be able to test self-signed pages', function(done) {
+        loadWebView(h.driver, function() {
+          h.driver.title(function(err, title) {
+            should.not.exist(err);
+            title.should.include("Sauce Labs");
+            done();
+          });
+        }, 'https://selfsigned.buildslave.saucelabs.com', "Sauce Labs: Selenium Testing & More");
+      });
+    });
+  }
 };
 

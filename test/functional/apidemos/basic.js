@@ -1,7 +1,9 @@
-/*global it:true */
+/* global describe:true, before:true, after:true */
 "use strict";
 
 var path = require('path')
+  , ADB = require("../../../lib/devices/android/adb.js")
+  , spawn = require('child_process').spawn
   , appPath = path.resolve(__dirname, "../../../sample-code/apps/ApiDemos/bin/ApiDemos-debug.apk")
   , badAppPath = path.resolve(__dirname, "../../../sample-code/apps/ApiDemos/bin/ApiDemos-debugz.apk")
   , appPkg = "com.example.android.apis"
@@ -16,6 +18,9 @@ var path = require('path')
   , describeWd4 = driverBlock.describeForApp(appPath, "android", appPkg, appAct4)
   , describeBad = driverBlock.describeForApp(badAppPath, "android", appPkg,
       appAct)
+  , describeNoPkg = driverBlock.describeForApp(appPath, "android", null, appAct)
+  , describeNoAct = driverBlock.describeForApp(appPath, "android", appPkg, null)
+  , it = driverBlock.it
   , should = require('should');
 
 describeWd('basic', function(h) {
@@ -41,6 +46,25 @@ describeWd('basic', function(h) {
       setTimeout(next, 4000);
     });
   });
+  it('should not die if commands come in', function(done) {
+    var params = {timeout: 3};
+    h.driver.execute("mobile: setCommandTimeout", [params], function(err) {
+      should.not.exist(err);
+      var start = Date.now();
+      var find = function() {
+        h.driver.elementByName('Animation', function(err, el) {
+          should.not.exist(err);
+          should.exist(el);
+          if ((Date.now() - start) < 5000) {
+            setTimeout(find, 500);
+          } else {
+            done();
+          }
+        });
+      };
+      find();
+    });
+  });
   it('should not fail even when bad locator strats sent in', function(done) {
     h.driver.elementByLinkText("foobar", function(err) {
       should.exist(err);
@@ -60,7 +84,48 @@ describeWd('basic', function(h) {
       done();
     });
   });
+  it('should be able to get logcat log type', function(done) {
+    h.driver.logTypes(function(err, logTypes) {
+      should.not.exist(err);
+      logTypes.should.include('logcat');
+      done();
+    });
+  });
+  it('should be able to get logcat logs', function(done) {
+    h.driver.log('logcat', function(err, logs) {
+      should.not.exist(err);
+      logs.length.should.be.above(0);
+      logs[0].message.should.not.include("\n");
+      logs[0].level.should.equal("ALL");
+      should.exist(logs[0].timestamp);
+      done();
+    });
+  });
+  it('should be able to detect if app is installed', function(done) {
+    h.driver.execute('mobile: isAppInstalled', [{bundleId: 'foo'}], function(err, isInstalled) {
+      should.not.exist(err);
+      isInstalled.should.equal(false);
+      h.driver.execute('mobile: isAppInstalled', [{bundleId: 'com.example.android.apis'}],
+        function(err, isInstalled) {
+          should.not.exist(err);
+          isInstalled.should.equal(true);
+          done();
+      });
+    });
+  });
 });
+
+describeWd('without fastClear', function(h) {
+  it('should still be able to reset', function(done) {
+    h.driver.execute('mobile: reset', function(err) {
+      should.not.exist(err);
+      h.driver.getWindowSize(function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+  });
+}, null, null, null, {fastClear: false});
 
 describeWd2('activity style: no period', function(h) {
   it('should should still find activity', function(done) {
@@ -91,3 +156,50 @@ describeBad('bad app path', function(h) {
     done();
   });
 }, null, null, null, {expectConnError: true});
+
+describeNoAct('no activity sent in with caps', function(h) {
+  it('should throw an error', function(done) {
+    should.exist(h.connError);
+    var err = JSON.parse(h.connError.data);
+    err.value.origValue.should.include("app-activity");
+    done();
+  });
+}, null, null, null, {expectConnError: true});
+
+describeNoPkg('no package sent in with caps', function(h) {
+  it('should throw an error', function(done) {
+    should.exist(h.connError);
+    var err = JSON.parse(h.connError.data);
+    err.value.origValue.should.include("app-package");
+    done();
+  });
+}, null, null, null, {expectConnError: true});
+
+describe('pre-existing uiautomator session', function() {
+  before(function(done) {
+    var adb = new ADB();
+    var binPath = path.resolve(__dirname, "..", "..", "..", "build",
+        "android_bootstrap", "AppiumBootstrap.jar");
+    var uiArgs = ["shell", "uiautomator", "runtest", "AppiumBootstrap.jar", "-c",
+      "io.appium.android.bootstrap.Bootstrap"];
+    adb.push(binPath, "/data/local/tmp/", function(err) {
+      should.not.exist(err);
+      spawn("adb", uiArgs);
+      setTimeout(function() {
+        adb.getPIDsByName("uiautomator", function(err, pids) {
+          should.not.exist(err);
+          pids.length.should.equal(1);
+          done();
+        });
+      }, 500);
+    });
+  });
+  describeWd('launching new session', function(h) {
+    it('should kill pre-existing uiautomator process', function(done) {
+      h.driver.getWindowSize(function(err) {
+        should.not.exist(err);
+        done();
+      });
+    });
+  });
+});

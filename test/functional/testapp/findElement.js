@@ -1,7 +1,7 @@
-/*global it:true */
 "use strict";
 
 var describeWd = require("../../helpers/driverblock.js").describeForApp('TestApp')
+  , it = require("../../helpers/driverblock.js").it
   , should = require('should');
 
 describeWd('elementByTagName', function(h) {
@@ -25,10 +25,12 @@ describeWd('elementByTagName', function(h) {
       els[1].click(function() {
         h.driver.elementByTagName('alert', function(err, el) {
           should.not.exist(err);
-          el.elementsByTagName('button', function(err, buttons) {
+          el.elementByName('OK', function(err) {
             should.not.exist(err);
-            buttons.length.should.equal(2);
-            done();
+            el.elementByName('Cancel', function(err) {
+              should.not.exist(err);
+              done();
+            });
           });
         });
       });
@@ -54,9 +56,9 @@ describeWd('elementByTagName', function(h) {
 });
 
 describeWd('elementsByTagName', function(h) {
-  it('should find both elements on the app', function(done) {
+  it('should find all elements in the app', function(done) {
     h.driver.elementsByTagName('button', function(err, elements) {
-      elements.length.should.equal(3);
+      elements.length.should.equal(4);
       should.exist(elements[0].value);
       done();
     });

@@ -1,10 +1,10 @@
 // This is basically a port of webdriver-test.py
 // https://github.com/hugs/appium/blob/master/sample-code/webdriver-test.py
-/*global it:true */
 "use strict";
 
 var assert = require("assert")
   , describeWd = require("../../helpers/driverblock.js").describeForApp('TestApp')
+  , it = require("../../helpers/driverblock.js").it
   , should = require('should')
   , _ = require("underscore");
 
@@ -57,16 +57,16 @@ describeWd('calc app', function(h) {
   };
 
   it('should fill two fields with numbers', function(done) {
-    populate("elem", h.driver, _.bind(computeAndCheck, this, h.driver, done));
+    populate("elem", h.driver, computeAndCheck.bind(this, h.driver, done));
   });
 
   // using sendKeysToActiveElement
   it('should fill two fields with numbers - sendKeys', function(done) {
-    populate("driver", h.driver, _.bind(computeAndCheck, this, h.driver, done));
+    populate("driver", h.driver, computeAndCheck.bind(this, h.driver, done));
   });
 
   it('should fill two fields with numbers - setValue', function(done) {
-    populate("elem-setvalue", h.driver, _.bind(computeAndCheck, this, h.driver, done));
+    populate("elem-setvalue", h.driver, computeAndCheck.bind(this, h.driver, done));
   });
 
   it('should confirm that button is displayed', function(done){
@@ -114,8 +114,8 @@ describeWd('calc app', function(h) {
         driver.acceptAlert(function(){
           buttons[1].click(function() {
             driver.alertText(function(err, value){
-              // maybe we could get alert body text too?
-              assert.equal(value, "Cool title");
+              value.should.include("Cool title");
+              value.should.include("this alert is so cool.");
               driver.dismissAlert(done);
             });
           });
@@ -216,6 +216,31 @@ describeWd('calc app', function(h) {
       should.exist(err);
       err.cause.value.message.should.equal("Not yet implemented. Please help us: http://appium.io/get-involved.html");
       done();
+    });
+  });
+
+  it('should be able to get syslog log type', function(done) {
+    h.driver.logTypes(function(err, logTypes) {
+      should.not.exist(err);
+      logTypes.should.include('syslog');
+      logTypes.should.not.include('logcat');
+      done();
+    });
+  });
+  it('should be able to get syslog logs', function(done) {
+    h.driver.setImplicitWaitTimeout(4000, function(err) {
+      should.not.exist(err);
+      h.driver.elementByName('SumLabelz', function(err) {
+        should.exist(err);
+        h.driver.log('syslog', function(err, logs) {
+          should.not.exist(err);
+          logs.length.should.be.above(0);
+          logs[0].message.should.not.include("\n");
+          logs[0].level.should.equal("ALL");
+          should.exist(logs[0].timestamp);
+          done();
+        });
+      });
     });
   });
 });

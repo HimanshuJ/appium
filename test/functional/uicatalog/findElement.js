@@ -1,10 +1,20 @@
-/*global it:true */
 "use strict";
 
 var describeWd = require("../../helpers/driverblock.js").describeForApp('UICatalog')
+  , it = require("../../helpers/driverblock.js").it
   , _ = require("underscore")
   , spinWait = require("../../helpers/spin.js").spinWait
   , should = require('should');
+
+describeWd('find by id', function(h) {
+  it('should find a single element by id', function(done) {
+    // ButtonsExplain: 'Various uses of UIButton'
+    h.driver.elementById('ButtonsExplain', function(err, els) {
+      should.not.exist(err);
+      done();
+    });
+  });
+});
 
 describeWd('findElementNameContains', function(h) {
   it('should find a single element by name', function(done) {
